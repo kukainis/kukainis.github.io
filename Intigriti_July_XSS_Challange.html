@@ -1,0 +1,145 @@
+<head>
+	<!-- Compiled and minified CSS -->
+	<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/css/materialize.min.css">
+	<!-- Compiled and minified JavaScript -->
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/js/materialize.min.js"></script>
+	<!-- icons n shit -->
+	<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+	<script src="prism.js"></script>
+	<link href="prism.css" rel="stylesheet">
+</head>
+
+
+<body>
+	<div class="row">
+		<div class="container center">
+			<h2><b>&lt;h2&gt;</b>Intigriti July XSS Challange<b>&lt;/h2&gt;</b></h2>
+		</div>
+	</div>
+
+	<div class="row">
+
+	<div class="container">
+
+	<p style="font-size: 20px;">
+	&emsp;
+	<br>
+	&emsp;This was one of the hardest CTF like challanges that I've managed to complete and I learned a lot. Hopefully you'll also learn something by reading this writeup.
+    Thanks Vroemy for the challange and kudos to IvarsVids for doing the challange in 20 minutes. Only took me 3 days, talk about skill difference :D . With that being said, let's jump in the challange and try to solve it.
+    </p>
+
+
+	<p style="font-size: 20px;">
+	&#187; <b>Where to start?</b><br>
+    </p>
+
+	<p style="font-size: 20px;">
+	&emsp;In a way start of any challange is the most daunting part. You open a website and what's next? Where to look? In general what I like to do is click everything that can be clicked and check if there are any variables passed 
+    between client and server. Then try to figure out what backend server would do with those variables. In this challange theres not much to click, but all we need is one input that's not sanitized. After clicking around the site, I only 
+    found 1 variable thats passed to the server. When choosing month from archive a month GET variable is passed to the server. Lets use that as a start.
+    </p>
+
+    <div class="center"><img src="images/pages/2/1.png"></div></br>
+
+
+	<p style="font-size: 20px;">
+    &#187; <b>Finding vulnerability in <code class="lang-html">month</code> variable</b><br>
+    </p>
+	<p style="font-size: 20px;">
+    &emsp;Before looking for vulnerbilites in <code class="lang-html">month</code> variable, try to think about what backend server will do with it. What would you do if you had to create an Awesome kitty blog and store blog posts. How would you store and access these posts?
+    When it comes to storing data from webpage, SQL database is the most common way of doing it. Now we have to test if our assumption is correct and our variable is passed to SQL query. If we assume that backend server runs query that looks something like:
+    <code class="lang-sql">SELECT * FROM blog WHERE month=2</code>
+    We can try to modify our query in a way where if our modifcation is parsed we get more data back from server. Let's try to get blog posts about more than 1 month in a single query, if the response contains blog posts for both month, then we know that we 
+    can inject code into our query.
+    <code class="lang-sql">SELECT * FROM blog WHERE month=2 OR 3 </code>
+    </p>
+	<div class="center"><img src="images/pages/2/2.png"></div>
+	<p style="font-size: 20px;">
+    Response from server now contains blog posts from both months. Congratulations, you have found an SQL injection. But wait, the challange had to do something with XSS. To trigger an XSS we have to send some code back to webpage. Our SQL query sends code back to our webpage.
+    See how it's all slowy coming together? At this point I thought I'm almost done but ,boy, was I wrong. To send back data using SQL query, first we must determine how many columns our query returns, this can be done using <code class="lang-sql">UNION SELECT</code>. This way we can add another query to
+    the data we return, but the query we add must contain the same amount of columns. Also sometimes it should contain the same types as our initial query however this can be passed if we select NULL values. </br>
+    Test if query returns 1 column:
+    <code class="lang-sql">SELECT * FROM blog WHERE month=1 UNION SELECT NULL</code>
+    </p>
+	<div class="center"><img src="images/pages/2/3.png"></div>
+	<p style="font-size: 20px;">
+    This returns an error, so the query returns more that 1 column.
+    Test if query returns 2 columns:
+    <code class="lang-sql">SELECT * FROM blog WHERE month=1 UNION SELECT NULL, NULL</code></br>
+    Now we just keep adding NULL values until we get and valid response.
+    <code class="lang-sql">SELECT * FROM blog WHERE month=1 UNION SELECT NULL, NULL, NULL, NULL, NULL</code>
+    </p>
+	<div class="center"><img src="images/pages/2/4.png"></div>
+    </br>
+	<p style="font-size: 20px;">
+    So far we know that query returns 5 columns, next let's try to actually return some values
+    <code class="lang-sql">SELECT * FROM blog WHERE month=1 UNION SELECT 1, 1, 1, 1, 1</code>
+    </p>
+    </br>
+
+	<p style="font-size: 20px;">
+    Nice, we have some new values in our blog. All we have to do know is just send and basic <code class="lang-js"><script>alert(document.domain)</script></code> and we are done right? Well lets try that.
+    </p>
+	<div class="center"><img src="images/pages/2/5.png"></div>
+	<p style="font-size: 20px;">
+    Error. Next I tried multiple things, using ' and " to encapulate string, still Error. Adding payload to different columns. Still Error. After some googling I found that string in SQL can be sent as HEX
+    values, so I tried that. 
+    </p>
+	<div class="center"><img src="images/pages/2/6.png"></div>
+	<p style="font-size: 20px;">
+    Great, now we can add strings to our query, whats not so great is that they are sanitized. I tried to bypass the sanatizer, but nothing worked. At this point I was thinking that this is some kind of evil joke and I gave up for a while, there 
+    wasnt any other variables that I could control that were sent to server. Of corse there was, I just didnt realize it.
+    In the articles on target site, we can see an author, but in my testing I never managed to send a string to author column, however if I sent an integer, I got an author.
+    This means that after the first query that gets blog posts there is a query that find author for this blog post
+    <code class="lang-sql">SELECT * FROM blog WHERE month = 2</code> This query returns all data about article containing author ID that is passed to next query.
+    <code class="lang-sql">SELECT name FROM user WHERE id = 1 </code> authord_id is passed to this query to return author name.
+    To test this i tried to send the following payload:
+    </p>
+	<div class="center"><img src="images/pages/2/7.png"></div>
+	<p style="font-size: 20px;">
+    Idea behind this was to make the second query return data about user with id=2, <code class="lang-sql">1 OR 2</code> would return data about both users and <code class="lang-sql">LIMIT 1,1</code> would LIMIT the returned data to only the data about the second user.
+    If it would work, I would know that we can also modify the second query.
+    It did not work. In first query when we tried to pass strings, we had to hex encdode them so I tried to do the same with with this query.
+    </p>
+	<div class="center"><img src="images/pages/2/8.png"></div>
+	<p style="font-size: 20px;">
+    Great! It works, we now have changed author of our blog post. Now just as with the first query, lets determine the column count of second query using same NULL SELECT method we used with first query <code class="lang-sql">SELECT * FROM authors WHERE id=1 UNION SELECT NULL, NULL, NULL</code>.
+    Now that we know how many columns second query returns we can try to add new author, again, using the same UNION SELECT method we used with first query. Because author query returns 3 column and only 1 column is author name, I tried to place author in all 3 columns,
+    1 by 1 and look for which query doesnt fail and returns my string as new author. I tried both options, hex encoded values for strings and normal strings. Of course this input also had to be HEX encoded
+    Now author query looks something like this - <code class="lang-sql">SELECT * FROM user WHERE id = 1 UNION SELECT 2,0x74657374,2 LIMIT 1,1</code>   Also this part must be hex encoded <code class="lang-sql">1 UNION SELECT 2,0x74657374,2 LIMIT 1,1</code>
+    </p>
+	<div class="center"><img src="images/pages/2/9.png"></div>
+
+
+	<p style="font-size: 20px;">
+    &#187; <b>Bypassing CSP</b><br>
+    Just as with first query lets send xss payload instead of test string.
+    Looking at page source, everything looks fine, our XSS payload is not sanitized, alert is still there but nothing's happening. What I missed from the start, was that target site was sending back an content-security-policy header. 
+    </p>
+    <div class="center"><img src="images/pages/2/10.png"></div></br>
+	<p style="font-size: 20px;">
+    What this header does is it allows to load javascript only from whitelisted sites.
+    To be honest before this challange I never tried to bypass CSP protection so this took me the longest. After some googling I found a great site to check CSP policy <a href="https://csp-evaluator.withgoogle.com">CSP-evaluator</a> .This reseach paper helped me understand how to bypass CSP - <a href="https://research.google/pubs/pub45542/">Link</a>
+    From CSP-evaluator I deteremened that probably my best chance to bypass CSP was by using *.googleapis.com to load AngularJS and find angular payload that could bypass CSP.
+    </p>
+
+
+
+	<p style="font-size: 20px;">
+	&emsp; Thank you for taking your time and reading this :) and stay safe - dont use js.
+	<br>
+	<br>
+	<br>
+	<br>
+		</p>
+					<a href="index.html" class="black-text"> 
+						<span class="valign-wrapper left">
+						   <i class="material-icons">chevron_left</i>
+                        Go Home
+						</span>
+					</a>
+
+		</div>
+    	</div>
+	</div>
+</body>
