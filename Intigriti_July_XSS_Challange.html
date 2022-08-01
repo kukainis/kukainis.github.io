@@ -57,16 +57,16 @@
 	<p style="font-size: 20px;">
     Response from server now contains blog posts from both months. Congratulations, you have found an SQL injection. But wait, the challenge had to do something with XSS. To trigger an XSS we have to send some code back to web page. Our SQL query sends code back to our web page.
     See how it's all slowly coming together? At this point I thought I'm almost done but ,boy, was I wrong. To send back data using SQL query, first we must determine how many columns our query returns, this can be done using <code class="lang-sql">UNION SELECT</code>. This way we can add another query to
-    the data we return, but the query we add must contain the same amount of columns. Also sometimes it should contain the same types as our initial query however this can be passed if we select NULL values. </br>
+    the data we return, but the query we add must contain the same amount of columns. Also sometimes it must be the same type as our initial query however this can be passed if we select NULL values. </br>
     Test if query returns 1 column:
     <code class="lang-sql">SELECT * FROM blog WHERE month=1 UNION SELECT NULL</code>
     </p>
 	<div class="center"><img src="images/pages/2/3.png"></div>
 	<p style="font-size: 20px;">
     This returns an error, so the query returns more that 1 column.
-    Test if query returns 2 columns:
-    <code class="lang-sql">SELECT * FROM blog WHERE month=1 UNION SELECT NULL, NULL</code></br>
-    Now we just keep adding NULL values until we get and valid response.
+    Test if query returns 2 columns:</br>
+    <code class="lang-sql">SELECT * FROM blog WHERE month=1 UNION SELECT NULL, NULL</code> -&gt;still an error</br>
+    Now we just keep adding NULL values until we get and valid response:</br>
     <code class="lang-sql">SELECT * FROM blog WHERE month=1 UNION SELECT NULL, NULL, NULL, NULL, NULL</code>
     </p>
 	<div class="center"><img src="images/pages/2/4.png"></div>
@@ -88,12 +88,13 @@
 	<div class="center"><img src="images/pages/2/6.png"></div>
 	<p style="font-size: 20px;">
     Great, now we can add strings to our query, what's not so great is that they are sanitized. I tried to bypass the sanitizer, but nothing worked. At this point I was thinking that this is some kind of evil joke and I gave up for a while, there 
-    wasn't any other variables that I could control that were sent to server. Of course there was, I just didnt realize it.
+    wasn't any other variables that I could control that were sent to server. Well, of course there was, I just didnt realize it.
     In the articles on target site, we can see an author, but in my testing I never managed to send a string to author column, however if I sent an integer, I got an author.
-    This means that after the first query that gets blog posts there is a query that find author for this blog post
-    <code class="lang-sql">SELECT * FROM blog WHERE month = 2</code> This query returns all data about article containing author ID that is passed to next query.
-    <code class="lang-sql">SELECT name FROM user WHERE id = 1 </code> authord_id is passed to this query to return author name.
+    This means that after the first query that gets blog posts there is another query that find author for this blog post.</br>
+    <code class="lang-sql">SELECT * FROM blog WHERE month = 2</code> This query returns all data about article containing author ID that is passed to next query.</br>
+    <code class="lang-sql">SELECT name FROM user WHERE id = 1 </code> authord id from first query is passed to this query to return author name.
     To test this i tried to send the following payload:
+    <code class="lang-html">?month=1 UNION SELECT 1,2,1,1 OR 2 LIMIT 1,1,1</code>
     </p>
 	<div class="center"><img src="images/pages/2/7.png"></div>
 	<p style="font-size: 20px;">
@@ -104,13 +105,18 @@
     </p>
 	<div class="center"><img src="images/pages/2/8.png"></div>
 	<p style="font-size: 20px;">
-    Great! It works, we now have changed author of our blog post. Now just as with the first query, lets determine the column count of second query using same NULL SELECT method we used with first query <code class="lang-sql">SELECT * FROM authors WHERE id=1 UNION SELECT NULL, NULL, NULL</code>.
+    Great! It works, we now have changed author of our blog post. Now just as with the first query, lets determine the column count of second query using same NULL SELECT method we used with first query: <code class="lang-sql">SELECT * FROM authors WHERE id=1 UNION SELECT NULL, NULL, NULL</code></br>
     Now that we know how many columns second query returns we can try to add new author, again, using the same UNION SELECT method we used with first query. Because author query returns 3 columns and only 1 column is author name, I tried to place author in all 3 columns,
-    1 by 1 and look for which query doesn't fail and returns my string as new author. I tried both options, hex encoded values for strings and normal strings. Of course this input also had to be HEX encoded
-    Now author query looks something like this - <code class="lang-sql">SELECT * FROM user WHERE id = 1 UNION SELECT 2,0x74657374,2 LIMIT 1,1</code>   Also this part must be hex encoded <code class="lang-sql">1 UNION SELECT 2,0x74657374,2 LIMIT 1,1</code>
+    1 by 1 and look for which query doesn't fail and returns my string as new author. I tried both options, hex encoded values for strings and normal strings. Of course this input also had to be HEX encoded.
+    Now author query looks something like this - <code class="lang-sql">SELECT * FROM authors WHERE id = 1 UNION SELECT 2,0x74657374,2 LIMIT 1,1</code> (test -hex-&gt; 0x74657374).</br>
+    Our payload is: <code class="lang-sql">1 UNION SELECT 2,0x74657374,2 LIMIT 1,1</code> and it all must be HEX encoded because we will place it in the initial query as author.</br>
+    Now we can add this hex encoded blob the the initial query:
     </p>
 	<div class="center"><img src="images/pages/2/9.png"></div>
 
+	<p style="font-size: 20px;">
+
+    </p>
 
 	<p style="font-size: 20px;">
     &#187; <b>Bypassing CSP</b><br>
@@ -120,10 +126,10 @@
     <div class="center"><img src="images/pages/2/10.png"></div></br>
 	<p style="font-size: 20px;">
     What this header does is it allows loading javascript only from whitelisted sites.
-    To be honest before this challenge I never tried to bypass CSP protection so this took me the longest. After some googling I found a great site by google to check CSP policy <a href="https://csp-evaluator.withgoogle.com">CSP-evaluator</a>. + This reseach paper helped me understand how to bypass CSP - <a href="https://research.google/pubs/pub45542/">Link</a>
-    From CSP-evaluator I deteremened that probably my best chance to bypass CSP was by loading AngularJS from one of the whitelisted URLS and finding angular payload that could bypass CSP.
+    To be honest before this challenge I never tried to bypass CSP protection so this took me the longest. After some googling I found a great site by google to check CSP policy <a href="https://csp-evaluator.withgoogle.com">CSP-evaluator</a>. + This reseach paper helped me understand how to bypass CSP - <a href="https://research.google/pubs/pub45542/">Link</a>.
+    From CSP-evaluator I deteremened that probably my best chance to find a bypass was by loading AngularJS from one of the whitelisted URLS and finding angular payload.
     After some more googling I found a similar <a href="https://github.com/cure53/XSSChallengeWiki/wiki/H5SC-Minichallenge-3:-%22Sh*t,-it's-CSP!%22">challenge</a> that had some nice payloads.
-    I ended up using this one 
+    I ended up using this one:
     <pre>
     <code class="lang-html">
     &lt;div ng-app ng-csp>
